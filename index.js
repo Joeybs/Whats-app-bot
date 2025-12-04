@@ -1,19 +1,20 @@
-import fs from "fs";
-import path from "path";
-
-// Always reset WhatsApp session so QR shows on every deploy
-const AUTH_FOLDER = "./auth_info";
-if (fs.existsSync(AUTH_FOLDER)) {
-  fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
-  console.log("Old auth removed — new QR will generate.");
-}
-fs.mkdirSync(AUTH_FOLDER, { recursive: true });
-
 import express from "express";
 import { makeWASocket, useMultiFileAuthState } from "@whiskeysockets/baileys";
 import QRCode from "qrcode";
+import fs from "fs";
 import pino from "pino";
 import axios from "axios";
+
+// ====== FORCE QR RESET ======
+if (fs.existsSync("auth_info")) {
+  fs.rmSync("auth_info", { recursive: true, force: true });
+  console.log("Old session deleted. Fresh QR will be generated.");
+}
+
+// Recreate folder for new login
+fs.mkdirSync("auth_info", { recursive: true });
+
+// ============================
 
 // Express setup
 const app = express();
