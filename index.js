@@ -1,24 +1,32 @@
+import fs from "fs";
+import path from "path";
+
+// Always reset WhatsApp session so QR shows on every deploy
+const AUTH_FOLDER = "./auth_info";
+if (fs.existsSync(AUTH_FOLDER)) {
+  fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+  console.log("Old auth removed — new QR will generate.");
+}
+fs.mkdirSync(AUTH_FOLDER, { recursive: true });
+
 import express from "express";
 import { makeWASocket, useMultiFileAuthState } from "@whiskeysockets/baileys";
 import QRCode from "qrcode";
-import fs from "fs";
 import pino from "pino";
 import axios from "axios";
 
-// Ensure Railway has a place to save WhatsApp login session
-if (!fs.existsSync("auth_info")) {
-  fs.mkdirSync("auth_info", { recursive: true });
-}
-
+// Express setup
 const app = express();
 app.use(express.json({ limit: "50mb" }));
 
-const PORT = process.env.PORT || 8080; // Railway uses 8080
+const PORT = process.env.PORT || 8080; // Railway port
 const CHIME_WEBHOOK = "";
 
+// Globals
 let sock;
 let qrCodeData = "";
 
+// ====== START WHATSAPP SOCKET ======
 async function startSock() {
   const { state, saveCreds } = await useMultiFileAuthState("auth_info");
 
@@ -40,7 +48,7 @@ async function startSock() {
 
     if (connection === "open") {
       console.log("WhatsApp connected!");
-      qrCodeData = "";
+      qrCodeData = ""; // Hide QR when connected
     }
   });
 
@@ -51,6 +59,7 @@ startSock();
 
 // ====== ROUTES ======
 
+// QR Page
 app.get("/qr", (req, res) => {
   if (!qrCodeData)
     return res.send("<h1>No QR. WhatsApp is connected ✔️</h1>");
@@ -63,9 +72,10 @@ app.get("/qr", (req, res) => {
   `);
 });
 
+// Root message
 app.get("/", (req, res) => res.send("ONTH WhatsApp Bot is Running!"));
 
-// Send message
+// Message Sender
 app.post("/send", async (req, res) => {
   try {
     const { number, message } = req.body;
@@ -82,4 +92,5 @@ app.post("/send", async (req, res) => {
   }
 });
 
+// Start server
 app.listen(PORT, () => console.log("Server running on", PORT));
