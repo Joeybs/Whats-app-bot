@@ -4,8 +4,10 @@ import QRCode from "qrcode";
 import fs from "fs";
 import pino from "pino";
 
-const AUTH_DIR = "/var/data";   // <── FIXED
+// Correct persistent storage directory
+const AUTH_DIR = "/var/data/auth_info";   // <── FINAL FIX
 
+// Ensure folder exists
 if (!fs.existsSync(AUTH_DIR)) {
   fs.mkdirSync(AUTH_DIR, { recursive: true });
 }
@@ -18,7 +20,9 @@ let sock;
 let qrImage = null;
 let isConnected = false;
 
-/* ================= START SOCKET ================= */
+/* ======================================================
+   START WHATSAPP SOCKET
+====================================================== */
 async function startSock() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
@@ -30,24 +34,25 @@ async function startSock() {
 
   sock.ev.on("creds.update", saveCreds);
 
-  sock.ev.on("connection.update", async (update) => {
-    const { qr, connection } = update;
-
+  sock.ev.on("connection.update", async ({ qr, connection }) => {
     console.log("UPDATE:", { qr: !!qr, connection });
 
+    // QR GENERATED
     if (qr) {
       qrImage = await QRCode.toDataURL(qr);
       isConnected = false;
     }
 
+    // CONNECTED SUCCESSFULLY
     if (connection === "open") {
-      console.log("✅ WhatsApp Connected");
+      console.log("✅ WhatsApp Connected!");
       qrImage = null;
       isConnected = true;
     }
 
+    // DISCONNECTED → restart socket
     if (connection === "close") {
-      console.log("❌ Disconnected — restarting...");
+      console.log("❌ Disconnected — restarting in 1s...");
       isConnected = false;
       qrImage = null;
 
@@ -60,8 +65,11 @@ async function startSock() {
 
 startSock();
 
-/* ================= ROUTES ================= */
+/* ======================================================
+   ROUTES
+====================================================== */
 
+// Home page
 app.get("/", (req, res) => {
   res.send(`
     <h1>ONTH WhatsApp Bot</h1>
@@ -70,6 +78,7 @@ app.get("/", (req, res) => {
   `);
 });
 
+// QR route
 app.get("/qr", (req, res) => {
   if (!qrImage) {
     return res.send(`
@@ -85,6 +94,7 @@ app.get("/qr", (req, res) => {
   `);
 });
 
+// Send message
 app.post("/send", async (req, res) => {
   try {
     const { number, message } = req.body;
@@ -101,4 +111,6 @@ app.post("/send", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log("🚀 Server running on port " + PORT));
+app.listen(PORT, () => {
+  console.log("🚀 Server running on port " + PORT);
+});
