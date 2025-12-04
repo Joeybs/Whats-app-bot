@@ -3,6 +3,7 @@ services:
     name: whats-app-bot
     env: node
     plan: starter
+
     buildCommand: "npm install"
     startCommand: "npm start"
 
