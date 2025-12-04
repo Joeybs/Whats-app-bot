@@ -1,3 +1,10 @@
+import fs from "fs";
+
+// Ensure auth folder exists
+if (!fs.existsSync("auth_info")) {
+  fs.mkdirSync("auth_info", { recursive: true });
+}
+
 import express from "express";
 import makeWASocket, { useMultiFileAuthState } from "@whiskeysockets/baileys";
 import QRCode from "qrcode";
