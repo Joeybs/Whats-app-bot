@@ -4,10 +4,9 @@ import QRCode from "qrcode";
 import fs from "fs";
 import pino from "pino";
 
-// Correct persistent storage directory
-const AUTH_DIR = "/var/data/auth_info";   // <── FINAL FIX
+const AUTH_DIR = "/var/data/auth_info";
 
-// Ensure folder exists
+// Ensure persistent folder exists
 if (!fs.existsSync(AUTH_DIR)) {
   fs.mkdirSync(AUTH_DIR, { recursive: true });
 }
@@ -16,51 +15,58 @@ const app = express();
 app.use(express.json());
 const PORT = process.env.PORT || 8080;
 
-let sock;
+let sock = null;
 let qrImage = null;
 let isConnected = false;
+let starting = false; // prevents double starts
 
 /* ======================================================
    START WHATSAPP SOCKET
 ====================================================== */
 async function startSock() {
-  const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  if (starting) return;
+  starting = true;
 
-  sock = makeWASocket({
-    logger: pino({ level: "silent" }),
-    auth: state,
-    printQRInTerminal: false
-  });
+  try {
+    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
-  sock.ev.on("creds.update", saveCreds);
+    sock = makeWASocket({
+      logger: pino({ level: "silent" }),
+      auth: state,
+      printQRInTerminal: false
+    });
 
-  sock.ev.on("connection.update", async ({ qr, connection }) => {
-    console.log("UPDATE:", { qr: !!qr, connection });
+    sock.ev.on("creds.update", saveCreds);
 
-    // QR GENERATED
-    if (qr) {
-      qrImage = await QRCode.toDataURL(qr);
-      isConnected = false;
-    }
+    sock.ev.on("connection.update", async ({ qr, connection }) => {
+      console.log("UPDATE:", { qr: !!qr, connection });
 
-    // CONNECTED SUCCESSFULLY
-    if (connection === "open") {
-      console.log("✅ WhatsApp Connected!");
-      qrImage = null;
-      isConnected = true;
-    }
+      if (qr) {
+        qrImage = await QRCode.toDataURL(qr);
+        isConnected = false;
+      }
 
-    // DISCONNECTED → restart socket
-    if (connection === "close") {
-      console.log("❌ Disconnected — restarting in 1s...");
-      isConnected = false;
-      qrImage = null;
+      if (connection === "open") {
+        console.log("✅ WhatsApp Connected!");
+        qrImage = null;
+        isConnected = true;
+      }
 
-      setTimeout(() => startSock(), 1000);
-    }
-  });
+      if (connection === "close") {
+        console.log("❌ Disconnected — restarting in 2s...");
+        isConnected = false;
+        qrImage = null;
+        starting = false;
 
-  return sock;
+        setTimeout(() => startSock(), 2000);
+      }
+    });
+
+  } catch (err) {
+    console.error("WA INIT ERROR:", err);
+    starting = false;
+    setTimeout(() => startSock(), 3000);
+  }
 }
 
 startSock();
@@ -69,7 +75,7 @@ startSock();
    ROUTES
 ====================================================== */
 
-// Home page
+// Home
 app.get("/", (req, res) => {
   res.send(`
     <h1>ONTH WhatsApp Bot</h1>
@@ -78,12 +84,10 @@ app.get("/", (req, res) => {
   `);
 });
 
-// QR route
+// QR
 app.get("/qr", (req, res) => {
   if (!qrImage) {
-    return res.send(`
-      <h1>No QR available — Not generated or already connected.</h1>
-    `);
+    return res.send(`<h1>No QR available — Already connected or loading...</h1>`);
   }
 
   res.send(`
@@ -94,10 +98,14 @@ app.get("/qr", (req, res) => {
   `);
 });
 
-// Send message
+// SEND MESSAGE
 app.post("/send", async (req, res) => {
   try {
-    const { number, message } = req.body;
+    if (!sock || !isConnected) {
+      return res.status(503).send("WhatsApp not connected");
+    }
+
+    let { number, message } = req.body;
     if (!number) return res.status(400).send("Missing number");
 
     const jid = number.replace(/\D/g, "") + "@s.whatsapp.net";
@@ -105,12 +113,13 @@ app.post("/send", async (req, res) => {
     await sock.sendMessage(jid, { text: message || "" });
 
     res.send({ status: "sent" });
+
   } catch (err) {
     console.error("SEND ERROR:", err);
-    res.status(500).send("Error sending message");
+    res.status(500).send("Send failed");
   }
 });
 
 app.listen(PORT, () => {
-  console.log("🚀 Server running on port " + PORT);
+  console.log("🚀 Server running at http://localhost:" + PORT);
 });
