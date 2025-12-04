@@ -1,5 +1,5 @@
 import express from "express";
-import makeWASocket, { useMultiFileAuthState } from "@whiskeysockets/baileys";
+import { makeWASocket, useMultiFileAuthState } from "@whiskeysockets/baileys";
 import QRCode from "qrcode";
 import fs from "fs";
 import pino from "pino";
