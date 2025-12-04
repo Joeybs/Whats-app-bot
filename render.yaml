@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: whats-app-bot
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: "npm install"
+    startCommand: "node index.js"
+
+    disk:
+      name: wa-session
+      mountPath: /var/data
+      sizeGB: 1
